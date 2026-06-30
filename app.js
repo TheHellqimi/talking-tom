@@ -35,9 +35,9 @@
   // Character animation per state. null = fall back to the idle clip.
   // As you render more animations, drop them in assets/video/ and set them here.
   const CLIPS = {
-    idle:      "assets/video/mariam-idle.webm",
-    listening: null,   // e.g. "assets/video/mariam-listening.webm"
-    talking:   null    // e.g. "assets/video/mariam-talking.webm"
+    idle:      "assets/video/mariam-idle.mp4",
+    listening: null,   // e.g. "assets/video/mariam-listening.mp4"
+    talking:   null    // e.g. "assets/video/mariam-talking.mp4"
   };
 
   // Optional sound-effect paths (all OPTIONAL — missing files fail silently).

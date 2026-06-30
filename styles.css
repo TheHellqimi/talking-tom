@@ -6,14 +6,10 @@
  * ===========================================================================*/
 
 :root {
-  --bg-fallback: #2a1a12;          /* warm dark — matches the room photo */
-  --text-on: #fff7ee;              /* warm white text over the photo/video */
+  --bg-fallback: #2a1a12;          /* warm dark — shows before the video loads */
+  --text-on: #fff7ee;              /* warm white text over the video */
   --ink: #243039;                  /* dark text inside the white reply bubble */
   --accent: #e85d7a;
-
-  /* ----- BACKGROUND PHOTO + readability scrim ----- */
-  --bg-scrim: linear-gradient(rgba(20,10,6,.42), rgba(20,10,6,.60));
-  --bg-image: url("assets/img/background.jpg");
 }
 
 * { box-sizing: border-box; }
@@ -22,11 +18,8 @@ html, body { height: 100%; margin: 0; }
 body {
   font-family: "Comic Sans MS", "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
   color: var(--text-on);
-  background-color: var(--bg-fallback);
-  background-image: var(--bg-scrim), var(--bg-image);
-  background-size: cover, cover;
-  background-position: center, center;
-  background-repeat: no-repeat, no-repeat;
+  /* The character video (with its own baked-in room) is the full background. */
+  background: var(--bg-fallback);
   min-height: 100%;
   overflow: hidden;
   -webkit-user-select: none;
@@ -81,14 +74,23 @@ body {
   text-align: center;
   padding: 0 16px;
 }
-.overlay-top { top: 0; padding-top: 16px; }
+.overlay-top {
+  top: 0;
+  padding-top: 16px;
+  padding-bottom: 34px;
+  /* soft dark scrim so the title stays readable over the bright wood wall */
+  background: linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,0));
+}
 .overlay-bottom {
   bottom: 0;
   padding-bottom: 22px;
+  padding-top: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  /* soft dark scrim behind the status + controls */
+  background: linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
 }
 
 .title {

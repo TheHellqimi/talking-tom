@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#2a1a12" />
   <title>Mariam the Talking Princess 👑</title>
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=3" />
 </head>
 
 <!-- body class drives the visual state: state-idle | state-listening | state-talking | state-error | state-unsupported -->
@@ -14,16 +14,15 @@
   <main class="stage">
 
     <!-- ===================================================================
-         THE CHARACTER  —  a transparent (alpha) video of Mariam, rendered in
-         Blender and keyed over the cabin background. It's full-bleed and
-         aligned with the background photo so she sits in the room.
-         Swap the .webm to change her; keep the same id. As you add more
+         THE CHARACTER  —  a full-scene video of Mariam (room baked into the
+         render), so it's both the character AND the background. Full-bleed.
+         Swap the .mp4 to change her; keep the same id. As you add more
          animations (talking, listening), wire them up in app.js -> CLIPS.
     ==================================================================== -->
     <video id="char-video" class="char-video"
            autoplay loop muted playsinline preload="auto"
            poster="assets/img/mariam-poster.jpg" aria-hidden="true">
-      <source src="assets/video/mariam-idle.webm" type="video/webm" />
+      <source src="assets/video/mariam-idle.mp4" type="video/mp4" />
     </video>
 
     <!-- The whole screen is the tap target -->
@@ -61,7 +60,7 @@
   </main>
 
   <!-- Config first (so app.js can read window.RESPONSES), then the app. -->
-  <script src="responses.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="responses.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
