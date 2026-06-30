@@ -1,42 +1,38 @@
 /* =============================================================================
- *  responses.js  —  Tom the Talking Cat: canned-response engine config
+ *  responses.js  —  Mariam the Talking Princess: canned-response engine config
  * =============================================================================
  *
- *  THIS IS THE FILE YOU EDIT to change what Tom says.
+ *  THIS IS THE FILE YOU EDIT to change what Mariam says.
+ *
+ *  Persona: sweet and giggly, a little bit of playful teasing / sweet-talking,
+ *  always kind and kid-safe. She likes to gently joke about YOU, but never in
+ *  a mean way — more like a friendly princess who thinks you're adorable.
  *
  *  How matching works (see app.js -> matchResponse):
  *    - The user's speech is transcribed to text, lower-cased, and checked
  *      against each pattern in `patterns` IN ORDER (top to bottom).
  *    - A pattern matches if the transcript contains any one of its `match`
  *      keywords as a WHOLE WORD / PHRASE (case-insensitive, on word
- *      boundaries). So the keyword "hi" matches "hi there" but NOT "this",
- *      and "no" matches "no thanks" but NOT "know". Multi-word phrases like
- *      "tell me a joke" match when those words appear together.
- *    - The FIRST matching pattern wins, so put more SPECIFIC patterns
- *      (e.g. "what's your name") ABOVE more general ones.
- *    - When a pattern matches, Tom says ONE randomly-chosen line from `replies`.
- *    - If nothing matches, Tom says one random line from `fallback`.
+ *      boundaries). So "hi" matches "hi there" but NOT "this".
+ *    - The FIRST matching pattern wins, so put more SPECIFIC patterns above
+ *      more general ones.
+ *    - When a pattern matches, Mariam says ONE random line from `replies`.
+ *    - If nothing matches, she says one random line from `fallback`.
  *
- *  Tips:
- *    - Keep all `match` keywords lower-case.
- *    - Because matching is whole-word, short keywords like "no"/"ok"/"hi" are
- *      safe to use — they won't fire inside longer words.
- *    - Keep replies short, friendly and KID-SAFE.
- *    - Add as many patterns / replies as you like.
+ *  Tips: keep keywords lower-case; keep replies short, sweet and kid-safe.
  * ===========================================================================*/
 
 const RESPONSES = {
 
-  /* ----- patterns: checked top-to-bottom, first match wins ----- */
   patterns: [
 
-    /* -- Name (specific phrasing first) -- */
+    /* -- Name -- */
     {
       match: ["your name", "who are you", "what are you called", "whats your name"],
       replies: [
-        "I'm Tom the cat! Nice to meet you!",
-        "My name is Tom! What's yours?",
-        "They call me Tom! Meow!"
+        "Teehee, I'm Princess Mariam! And you are simply adorable.",
+        "My name is Mariam, the prettiest princess around! What's yours, cutie?",
+        "I'm Mariam! Hehe, did you forget already? You're so silly."
       ]
     },
 
@@ -44,9 +40,9 @@ const RESPONSES = {
     {
       match: ["how are you", "how do you feel", "hows it going", "are you okay", "are you ok"],
       replies: [
-        "I'm purr-fectly happy! How are you?",
-        "I feel great! Ready to play!",
-        "Meow-velous, thanks for asking!"
+        "I'm sparkling and sweet, hehe! Are you, my dear?",
+        "Feeling royal and giggly! You make me smile, you know.",
+        "Wonderful, now that you're here! Aww."
       ]
     },
 
@@ -54,71 +50,71 @@ const RESPONSES = {
     {
       match: ["how old", "your age", "what age", "when were you born"],
       replies: [
-        "I'm forever young — about three in cat years!",
-        "Old enough to nap a lot! Meow.",
-        "I stopped counting after my last birthday!"
+        "A princess never tells! But I'm younger than you act, hehe!",
+        "Old enough to know you're a sweetheart!",
+        "Forever pretty, that's my age! Teehee."
       ]
     },
 
-    /* -- Jokes -- */
+    /* -- Jokes  (sweet, giggly, gently teasing) -- */
     {
       match: ["joke", "jokes", "make me laugh", "funny", "something funny"],
       replies: [
-        "Why was the cat sitting on the computer? To keep an eye on the mouse!",
-        "What do you call a pile of kittens? A meow-ntain!",
-        "Why don't cats play cards in the jungle? Too many cheetahs!",
-        "What's a cat's favorite color? Purr-ple!",
-        "Why did the cat run from the tree? It was afraid of the bark!"
+        "Why are you so cute? Because you were made on a sweet day, hehe!",
+        "Knock knock! Who's there? You — the silliest, sweetest one I know!",
+        "I'd tell you a princess joke, but you're already the funniest thing here, teehee!",
+        "What's pink and giggly and likes you a lot? Me! Hehe.",
+        "You're so sweet I might get a cavity! Oops, princess problems."
       ]
     },
 
-    /* -- Greetings -- (whole-word matching keeps "hi" out of "this"/"history") */
+    /* -- Greetings -- */
     {
       match: ["hello", "hi", "hi there", "hey", "yo", "howdy", "hiya", "good morning", "good evening"],
       replies: [
-        "Hello there! I'm Tom!",
-        "Hi hi! So happy to see you! Meow!",
-        "Hey friend! Let's talk!"
+        "Hi hi! Hehe, you found me! I'm Princess Mariam.",
+        "Well hello there, cutie! Teehee.",
+        "Heyyy! Aww, I was hoping you'd say hi!"
       ]
     },
 
-    /* -- Food / hungry -- */
+    /* -- Food / sweets -- */
     {
-      match: ["hungry", "food", "eat", "eating", "snack", "fish", "treat", "treats", "milk", "yummy", "dinner", "lunch", "breakfast"],
+      match: ["hungry", "food", "eat", "eating", "snack", "cake", "candy", "sweets", "treat", "treats", "dinner", "lunch", "breakfast"],
       replies: [
-        "Mmm, did someone say fish? I'm so hungry!",
-        "I could eat a whole bowl of treats right now!",
-        "Yum yum! I love snacks! Do you have any?"
+        "Ooh, can we have cake? Princesses love sweet things — like you, hehe!",
+        "I'm craving candy! You'd share with me, right? You're too nice to say no.",
+        "Yummy! Let's have a royal snack, my dear."
       ]
     },
 
     /* -- Play / games -- */
     {
-      match: ["play", "playing", "game", "games", "fun", "chase", "ball", "toy", "yarn"],
+      match: ["play", "playing", "game", "games", "fun", "dance", "dancing"],
       replies: [
-        "Yay, let's play! I love chasing things!",
-        "Playtime is the best time! Wheee!",
-        "Throw me a ball of yarn! Meow!"
+        "Yay, let's play! You'll lose, but you're cute when you try, hehe!",
+        "Playtime with you is my favourite! Teehee.",
+        "Let's twirl and have fun, my dear!"
       ]
     },
 
     /* -- Sing / music -- */
     {
-      match: ["sing", "singing", "song", "music", "dance", "dancing"],
+      match: ["sing", "singing", "song", "music"],
       replies: [
-        "La la la... meow meow meow! That's my song!",
-        "I'm not a great singer, but I purr in tune!",
-        "Let's dance! Wiggle those whiskers!"
+        "La la laaa! Hehe, don't laugh at my singing, you!",
+        "I'll sing if you promise to clap, cutie!",
+        "A royal melody, just for you. Aww."
       ]
     },
 
-    /* -- Love / like / nice  (note: "silly cat" lives here — it's affectionate) -- */
+    /* -- Love / compliments -- */
     {
-      match: ["love you", "i like you", "youre cute", "you are cute", "good boy", "good cat", "you are nice", "youre nice", "cute", "adorable", "sweet", "silly cat"],
+      match: ["love you", "i like you", "youre cute", "you are cute", "pretty", "beautiful", "you are nice", "youre nice", "cute", "adorable", "sweet", "princess"],
       replies: [
-        "Aww, I love you too! Purr purr.",
-        "You're the best! *happy cat noises*",
-        "That makes my whiskers wiggle with joy!"
+        "Aww, stop it, you! Hehe, I like you too, sweetie.",
+        "You're making me blush, my dear! Teehee.",
+        "Of course you adore me — I'm a princess! But you're pretty sweet yourself."
       ]
     },
 
@@ -126,22 +122,20 @@ const RESPONSES = {
     {
       match: ["thank you", "thanks", "thank u", "cheers"],
       replies: [
-        "You're welcome! Anytime, friend!",
-        "No problem! Meow!",
-        "Happy to help! Purr."
+        "You're welcome, cutie! Hehe.",
+        "Anything for you, my dear!",
+        "Aww, such polite manners. I knew I liked you!"
       ]
     },
 
-    /* -- Insults / angry  (KID-SAFE sulky replies, never mean back) --
-       Keep these keywords narrow so friendly/neutral talk (like "I hate
-       broccoli" or an affectionate "silly cat") does NOT land here. */
+    /* -- Teasing / grumpy  (sweet sulky — never mean back) -- */
     {
-      match: ["stupid", "dumb", "shut up", "i hate you", "hate you", "youre ugly", "bad cat", "go away", "you stink"],
+      match: ["stupid", "dumb", "shut up", "i hate you", "hate you", "youre ugly", "go away", "you stink"],
       replies: [
-        "Aww, that's not very nice. I'll just go nap.",
-        "Hmph! Now my whiskers are droopy.",
-        "That made me a little sad... but I still like you.",
-        "Meow? Let's be friends instead!"
+        "Hmph! That's not very charming. But I forgive you, hehe.",
+        "Aww, a grumpy one! Don't worry, I'll still be your princess.",
+        "Teehee, you don't mean that. Come on, say something sweet!",
+        "A princess doesn't sulk... okay, maybe a tiny bit. But I still like you!"
       ]
     },
 
@@ -149,29 +143,29 @@ const RESPONSES = {
     {
       match: ["sleep", "sleepy", "tired", "nap", "good night", "goodnight", "bedtime"],
       replies: [
-        "A nap sounds purr-fect right now. Zzz...",
-        "I love sleeping in warm sunny spots!",
-        "Yawwwn... is it nap time already?"
+        "Sweet dreams, cutie! Dream of me, hehe.",
+        "A princess needs her beauty sleep — and so do you, sleepyhead!",
+        "Yawwn... nap time? Only if you tuck me in, teehee."
       ]
     },
 
-    /* -- Animal sounds / meow -- */
+    /* -- Talk / giggle -- */
     {
-      match: ["meow", "purr", "bark", "moo", "make a sound", "say something", "talk", "talking"],
+      match: ["talk", "talking", "say something", "make a sound", "giggle", "laugh"],
       replies: [
-        "Meow meow! Purrrrr!",
-        "Meeeoooow! Did I sound like a real cat?",
-        "Purr purr purr... that's my favorite sound!"
+        "Teehee, hehe, giggle giggle! You make me laugh, you know.",
+        "I could talk to you all day, cutie!",
+        "Hehe! What should we chat about, my dear?"
       ]
     },
 
-    /* -- Who made you / what are you -- */
+    /* -- Who/what are you -- */
     {
-      match: ["who made you", "are you real", "are you a robot", "are you alive", "what kind of cat"],
+      match: ["are you real", "are you a robot", "are you alive", "what are you"],
       replies: [
-        "I'm a friendly cartoon cat who loves to chat!",
-        "I'm as real as your imagination! Meow!",
-        "I'm a talking cat — pretty cool, right?"
+        "I'm a sweet little princess who loves chatting with you!",
+        "As real as your imagination, cutie! Hehe.",
+        "A talking princess — pretty magical, right? Just like you."
       ]
     },
 
@@ -179,25 +173,25 @@ const RESPONSES = {
     {
       match: ["what can you do", "help", "what do you do", "how do you work"],
       replies: [
-        "Tap me and talk! I'll chat right back! Try saying hello, or ask for a joke!",
-        "Say hi, ask my name, ask for a joke, or tell me you're hungry!",
-        "I love to listen and reply! Go on, say something fun!"
+        "Tap me and talk! I'll sweet-talk you right back, hehe!",
+        "Say hi, ask my name, ask for a joke, or just be cute at me!",
+        "I listen and giggle and adore you. It's a tough job, teehee!"
       ]
     },
 
-    /* -- Yes / no small talk -- */
+    /* -- Yes / no -- */
     {
       match: ["yes", "yeah", "yep", "yup", "sure", "okay", "ok"],
       replies: [
-        "Yay! I like the sound of that!",
-        "Awesome! Meow!"
+        "Yay! I knew you'd agree, cutie!",
+        "Hehe, good choice! You're so smart."
       ]
     },
     {
       match: ["no", "nope", "nah"],
       replies: [
-        "Aww, okay. Maybe next time!",
-        "No worries! Meow."
+        "Aww, no? Hehe, you're lucky you're cute!",
+        "Hmph, fine, be that way! ...I still like you. Teehee."
       ]
     },
 
@@ -205,9 +199,9 @@ const RESPONSES = {
     {
       match: ["bye", "goodbye", "see you", "see ya", "later", "gotta go", "got to go"],
       replies: [
-        "Bye bye! Come back and play soon!",
-        "See you later! I'll miss you! Meow!",
-        "Goodbye, friend! *waves paw*"
+        "Byeee! Don't miss me too much, cutie! Hehe.",
+        "See you soon, my dear! A princess waits for you.",
+        "Goodbye, sweetie! *blows a royal kiss*"
       ]
     }
 
@@ -215,12 +209,12 @@ const RESPONSES = {
 
   /* ----- fallback: used when NOTHING above matched ----- */
   fallback: [
-    "Hmm, I didn't quite catch that!",
-    "Say that again? My ears are fuzzy!",
-    "Meow? I'm not sure what you mean, but I like talking to you!",
-    "Ooh, tell me more!",
-    "Purr... try asking me for a joke!",
-    "I didn't understand, but you sound nice!"
+    "Hehe, what was that, cutie? Say it again!",
+    "Teehee, my royal ears didn't quite catch that!",
+    "Ooh, tell me more, my dear!",
+    "I'm not sure what you mean, but you sound adorable saying it!",
+    "Hmm? Try asking me for a joke, sweetie!",
+    "Giggle... you're funny even when I don't understand you!"
   ]
 };
 

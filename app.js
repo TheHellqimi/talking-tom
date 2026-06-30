@@ -1,10 +1,11 @@
 /* =============================================================================
- *  app.js  —  Tom the Talking Cat
+ *  app.js  —  Mariam the Talking Princess
  * =============================================================================
  *  Browser-only. No backend, no API keys, no network calls.
  *    - Listening  : Web Speech API  (SpeechRecognition / webkitSpeechRecognition)
  *    - Speaking   : Web Speech API  (speechSynthesis)
  *    - Replies    : matched in responses.js (window.RESPONSES)
+ *    - Character  : a transparent (alpha) video, swapped per state via CLIPS
  *
  *  Tune the constants in the CONFIG block below.
  * ===========================================================================*/
@@ -16,39 +17,42 @@
    *  CONFIG  —  the knobs you'll most likely want to change
    * =========================================================================*/
 
-  // Voice character. Higher pitch = more cartoon/chipmunk cat.
-  const TOM_PITCH  = 1.4;   // 0 (low) … 2 (high)
-  const TOM_RATE   = 1.0;   // 0.1 (slow) … 10 (fast); ~1 is natural
-  const TOM_VOLUME = 1.0;   // 0 … 1
+  // Voice character. ~1.0 pitch = natural; nudge up slightly for a sweeter tone.
+  const VOICE_PITCH  = 1.12;  // 0 (low) … 2 (high)
+  const VOICE_RATE   = 1.0;   // 0.1 (slow) … 10 (fast); ~1 is natural
+  const VOICE_VOLUME = 1.0;   // 0 … 1
+  const PREFER_FEMALE_VOICE = true; // pick a female browser voice when available
 
   // Language used for BOTH recognition and the preferred speaking voice.
   const RECOGNITION_LANG = "en-US";
-  const PREFERRED_VOICE_LANG = "en"; // first voice whose lang starts with this wins
+  const PREFERRED_VOICE_LANG = "en";
 
-  // Mouth animation: how often the mouth flaps open/closed while talking (ms).
-  const MOUTH_FLAP_MS = 140;
-
-  // When muted, Tom still "mouths" the words. This estimates how long for.
+  // When muted, Mariam still "talks" (animated) for an estimated duration.
   const MUTED_MS_PER_CHAR = 55;
-  const MUTED_MIN_MS = 900;
-  const MUTED_MAX_MS = 4500;
+  const MUTED_MIN_MS = 1000;
+  const MUTED_MAX_MS = 5000;
 
-  // Sound-effect + image asset paths (all OPTIONAL — missing files fail silently).
-  // Drop real files in assets/ and they'll start playing. See assets/sfx/README.md.
+  // Character animation per state. null = fall back to the idle clip.
+  // As you render more animations, drop them in assets/video/ and set them here.
+  const CLIPS = {
+    idle:      "assets/video/mariam-idle.webm",
+    listening: null,   // e.g. "assets/video/mariam-listening.webm"
+    talking:   null    // e.g. "assets/video/mariam-talking.webm"
+  };
+
+  // Optional sound-effect paths (all OPTIONAL — missing files fail silently).
   const ASSETS = {
     sfx: {
-      start: "assets/sfx/start.mp3", // played when listening begins
-      stop:  "assets/sfx/stop.mp3",  // played when listening ends
-      idle:  "assets/sfx/purr.mp3"   // reserved: an idle purr loop (not auto-played)
-    },
-    img: {
-      // Leave null to use the built-in SVG cat. Set to a path to override art later.
-      cat: null
+      start: "assets/sfx/start.mp3",
+      stop:  "assets/sfx/stop.mp3"
     }
   };
 
+  // Female-voice name hints (varies wildly by OS/browser).
+  const FEMALE_HINTS = /(female|woman|girl|zira|hazel|susan|linda|heera|catherine|samantha|victoria|karen|tessa|fiona|moira|serena|allison|ava|amelie|amélie|google uk english female|google us english)/i;
+
   /* ===========================================================================
-   *  STATE  —  internal; you usually don't need to touch below here
+   *  STATE  —  internal
    * =========================================================================*/
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -64,16 +68,14 @@
   let hadResult = false;     // did recognition return a transcript this round?
   let errorHandled = false;  // did onerror already set a message this round?
   let pendingReply = null;   // reply to speak once recognition fully ends (no echo)
-  let mouthTimer = null;     // interval id for the mouth flap
-  let mutedStopTimer = null;  // timeout id for ending a muted "mouth" run
+  let mutedStopTimer = null; // timeout id for ending a muted "talking" run
+  let currentClip = null;    // which clip src is loaded in the video element
   // Monotonic token: every new utterance bumps it. Async speech callbacks check
-  // they still own the latest token before touching state — so a cancelled
-  // utterance's late onstart/onend can't clobber a newer one. (Fixes the
-  // "stale onend flips state back to idle" race.)
+  // they still own the latest token before touching state, so a cancelled
+  // utterance's late onstart/onend can't clobber a newer one.
   let speakToken = 0;
-  const sfxCache = {};       // name -> HTMLAudioElement (or false if unavailable)
+  const sfxCache = {};
 
-  // DOM
   const els = {};
 
   /* ===========================================================================
@@ -84,52 +86,55 @@
 
   function init() {
     els.body        = document.body;
-    els.cat         = document.getElementById("cat");
+    els.tap         = document.getElementById("tap");
+    els.video       = document.getElementById("char-video");
     els.status      = document.getElementById("status");
     els.bubble      = document.getElementById("bubble");
     els.srLive      = document.getElementById("sr-live");
     els.mute        = document.getElementById("mute");
     els.unsupported = document.getElementById("unsupported");
 
-    // Optional: swap the built-in SVG cat for a custom image asset.
-    applyCatImageOverride();
+    currentClip = CLIPS.idle;
 
-    // The whole cat is the tap target. <button> already handles Enter/Space.
-    els.cat.addEventListener("click", onCatActivate);
+    // Some browsers pause muted autoplay until interaction; nudge it.
+    if (els.video && els.video.play) {
+      const p = els.video.play();
+      if (p && p.catch) p.catch(function () { /* will play on first tap */ });
+    }
+
+    els.tap.addEventListener("click", onActivate);
     els.mute.addEventListener("click", toggleMute);
 
-    // Pre-load speech-synthesis voices (they arrive asynchronously).
     if (synth) {
       loadVoices();
-      // Fired (sometimes more than once) once the voice list is ready.
       if (typeof synth.onvoiceschanged !== "undefined") {
         synth.onvoiceschanged = loadVoices;
       }
     }
 
     if (!SR) {
-      // No speech recognition (e.g. Firefox, older Safari). Listening won't work.
       enterUnsupported();
       return;
     }
 
     setupRecognition();
     setState("idle");
-    setStatus("Tap me to talk! 🐾");
+    setStatus("Tap me to talk! 👑");
   }
 
-  function applyCatImageOverride() {
-    if (!ASSETS.img.cat) return;
-    const svg = els.cat.querySelector(".cat-svg");
-    if (!svg) return;
-    const img = new Image();
-    img.src = ASSETS.img.cat;
-    img.alt = "";
-    img.className = "cat-svg";
-    img.setAttribute("aria-hidden", "true");
-    svg.replaceWith(img);
-    // NOTE: with a custom image, the #cat-mouth / #cat-ear animations won't
-    // apply. Provide your own animated art if you go this route.
+  /* ===========================================================================
+   *  CHARACTER VIDEO  (swap clip per state; falls back to idle)
+   * =========================================================================*/
+
+  function setClip(forState) {
+    if (!els.video) return;
+    const src = CLIPS[forState] || CLIPS.idle;
+    if (!src || src === currentClip) return; // nothing to change
+    currentClip = src;
+    els.video.src = src;
+    els.video.load();
+    const p = els.video.play();
+    if (p && p.catch) p.catch(function () { /* ignore */ });
   }
 
   /* ===========================================================================
@@ -139,8 +144,8 @@
   function setupRecognition() {
     recognition = new SR();
     recognition.lang = RECOGNITION_LANG;
-    recognition.continuous = false;     // stop automatically after one phrase
-    recognition.interimResults = false; // we only want the final transcript
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = function () {
@@ -153,9 +158,8 @@
     recognition.onresult = function (event) {
       const transcript = (event.results[0][0].transcript || "").trim();
       hadResult = true;
-      // Decide the reply now, but DON'T speak yet — wait for onend so the mic
-      // session is fully closed before synthesis starts (prevents Tom hearing
-      // himself / echo on platforms that release the mic late).
+      // Decide the reply now, but speak it in onend (after the mic closes) so
+      // Mariam never talks into a still-open microphone.
       pendingReply = transcript ? matchResponse(transcript) : null;
     };
 
@@ -174,38 +178,33 @@
         speak(reply);
         return;
       }
-      // No reply this round.
       if (!errorHandled && state === "listening") {
         setState("idle");
         setStatus(hadResult
-          ? "Hmm, I heard you but didn't catch the words — tap to try again! 🐾"
-          : "I didn't catch that — tap to try again! 🐾");
+          ? "Hehe, I heard you but didn't catch the words — tap to try again! 👑"
+          : "I didn't catch that — tap to try again, cutie! 👑");
       }
     };
   }
 
   function startListening() {
     if (!recognition || recognizing) return;
-    // Invalidate any in-flight speech so its async callbacks can't fire after
-    // we switch to listening, then silence Tom so he isn't talking into the mic.
-    speakToken++;
+    speakToken++;            // invalidate any in-flight speech callbacks
     if (synth) synth.cancel();
-    stopMouthFlap();
+    clearMutedTimer();
     hideBubble();
 
     try {
       setState("listening");
-      setStatus("Listening… I'm all ears! 👂");
+      setStatus("Listening… I'm all ears, cutie! 👂");
       playSfx("start");
       recognition.start();
     } catch (err) {
-      // start() throws InvalidStateError if a session is already running.
-      // If so, we ARE still listening — don't lie and say idle.
       if (recognizing) {
         setState("listening");
       } else {
         setState("idle");
-        setStatus("Tap me to talk! 🐾");
+        setStatus("Tap me to talk! 👑");
       }
     }
   }
@@ -215,7 +214,7 @@
     try { recognition.abort(); } catch (e) { /* ignore */ }
     recognizing = false;
     setState("idle");
-    setStatus("Tap me to talk! 🐾");
+    setStatus("Tap me to talk! 👑");
   }
 
   function handleRecognitionError(error) {
@@ -227,7 +226,7 @@
         break;
       case "no-speech":
         setState("idle");
-        setStatus("I didn't hear anything! Tap me and speak up. 🐾");
+        setStatus("I didn't hear anything! Tap me and speak up, sweetie. 👑");
         break;
       case "audio-capture":
         setStatus("I can't find a microphone. 🎤 Please plug one in!");
@@ -236,15 +235,13 @@
         setStatus("Hmm, the speech service needs the internet right now. 📶");
         break;
       case "aborted":
-        // User tapped to cancel — stay quiet.
         setState("idle");
-        setStatus("Tap me to talk! 🐾");
+        setStatus("Tap me to talk! 👑");
         break;
       default:
         setState("idle");
-        setStatus("Oops, something went wrong. Tap me to try again! 🐾");
+        setStatus("Oops, something went wrong. Tap me to try again! 👑");
     }
-    // Briefly show the shake, then relax to idle so the cat stays tappable.
     if (state === "error") {
       window.setTimeout(function () {
         if (state === "error") setState("idle");
@@ -253,52 +250,43 @@
   }
 
   /* ===========================================================================
-   *  RESPONSE MATCHING
+   *  RESPONSE MATCHING  (whole-word, case-insensitive)
    * =========================================================================*/
 
-  // Returns a single reply string for the given transcript.
   function matchResponse(text) {
-    const cfg = window.RESPONSES || { patterns: [], fallback: ["Meow!"] };
+    const cfg = window.RESPONSES || { patterns: [], fallback: ["Hehe!"] };
     const hay = " " + text.toLowerCase().trim() + " ";
 
     for (let i = 0; i < cfg.patterns.length; i++) {
-      const pattern = cfg.patterns[i];
-      const keywords = pattern.match || [];
+      const keywords = cfg.patterns[i].match || [];
       for (let k = 0; k < keywords.length; k++) {
         if (keywordMatches(hay, keywords[k])) {
-          return pickRandom(pattern.replies);
+          return pickRandom(cfg.patterns[i].replies);
         }
       }
     }
     return pickRandom(cfg.fallback);
   }
 
-  // Whole-word (boundary) matching: the keyword must appear bordered by a
-  // non-letter/digit on each side. So "hi" matches "hi there" but not "this",
-  // and "no" matches "no thanks" but not "know". Multi-word phrases match too.
   function keywordMatches(haystack, keyword) {
     const key = String(keyword).toLowerCase().trim();
     if (!key) return false;
-    // Escape every regex metacharacter so keywords are always treated literally.
     const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     try {
-      // ' is allowed inside a word (so "what's" stays one word); a word edge is
-      // anything that isn't a letter, digit, or apostrophe.
       const re = new RegExp("(^|[^a-z0-9'])" + esc + "([^a-z0-9']|$)", "i");
       return re.test(haystack);
     } catch (e) {
-      // Defensive fallback (should never hit, since we escape above).
       return haystack.indexOf(key) !== -1;
     }
   }
 
   function pickRandom(list) {
-    if (!list || !list.length) return "Meow!";
+    if (!list || !list.length) return "Hehe!";
     return list[Math.floor(Math.random() * list.length)];
   }
 
   /* ===========================================================================
-   *  SPEECH SYNTHESIS (talking) + mouth animation
+   *  SPEECH SYNTHESIS (talking)
    * =========================================================================*/
 
   function loadVoices() {
@@ -309,115 +297,96 @@
 
   function pickVoice(list) {
     if (!list || !list.length) return null;
-    const lang = PREFERRED_VOICE_LANG.toLowerCase();
-    // Prefer an exact RECOGNITION_LANG match, then any matching language,
-    // then a voice flagged default, then the first voice.
+    const en = list.filter(function (v) {
+      return v.lang && v.lang.toLowerCase().indexOf(PREFERRED_VOICE_LANG.toLowerCase()) === 0;
+    });
+    const pool = en.length ? en : list;
+    if (PREFER_FEMALE_VOICE) {
+      const f = pool.find(function (v) { return FEMALE_HINTS.test(v.name || ""); });
+      if (f) return f;
+    }
     return (
-      list.find(function (v) { return v.lang && v.lang.toLowerCase() === RECOGNITION_LANG.toLowerCase(); }) ||
-      list.find(function (v) { return v.lang && v.lang.toLowerCase().indexOf(lang) === 0; }) ||
-      list.find(function (v) { return v.default; }) ||
-      list[0]
+      pool.find(function (v) { return v.lang && v.lang.toLowerCase() === RECOGNITION_LANG.toLowerCase(); }) ||
+      pool.find(function (v) { return v.default; }) ||
+      pool[0]
     );
   }
 
   function speak(text) {
-    showBubble(text);   // visual speech bubble
-    announce(text);     // screen-reader live region (carries the actual reply)
+    showBubble(text);   // visual reply bubble
+    announce(text);     // screen-reader live region
 
     const token = ++speakToken;
 
     if (isMuted || !synth) {
-      mouthWithoutSound(text, token);
+      speakMuted(text, token);
       return;
     }
 
     try {
-      synth.cancel(); // clear anything queued/stuck (its stale callbacks are token-guarded)
+      synth.cancel(); // its stale callbacks are token-guarded
 
       const utter = new SpeechSynthesisUtterance(text);
       if (!chosenVoice) chosenVoice = pickVoice(synth.getVoices() || []);
       if (chosenVoice) utter.voice = chosenVoice;
       utter.lang   = (chosenVoice && chosenVoice.lang) || RECOGNITION_LANG;
-      utter.pitch  = TOM_PITCH;
-      utter.rate   = TOM_RATE;
-      utter.volume = TOM_VOLUME;
+      utter.pitch  = VOICE_PITCH;
+      utter.rate   = VOICE_RATE;
+      utter.volume = VOICE_VOLUME;
 
       utter.onstart = function () {
-        if (token !== speakToken) return; // superseded — ignore
+        if (token !== speakToken) return;
         setState("talking");
         setStatus("");
-        startMouthFlap();
       };
       utter.onend = function () {
         if (token !== speakToken) return;
-        stopMouthFlap();
         backToIdle();
       };
       utter.onerror = function () {
         if (token !== speakToken) return;
-        stopMouthFlap();
         backToIdle();
       };
 
       synth.speak(utter);
     } catch (e) {
-      mouthWithoutSound(text, token);
+      speakMuted(text, token);
     }
   }
 
-  // Muted (or no synth): flap the mouth for an estimated duration, no audio.
-  function mouthWithoutSound(text, token) {
+  // Muted (or no synth): hold the "talking" cue for an estimated duration.
+  function speakMuted(text, token) {
     setState("talking");
     setStatus("");
-    startMouthFlap();
     const ms = Math.min(
       MUTED_MAX_MS,
       Math.max(MUTED_MIN_MS, (text ? text.length : 20) * MUTED_MS_PER_CHAR)
     );
-    clearTimeout(mutedStopTimer);
+    clearMutedTimer();
     mutedStopTimer = window.setTimeout(function () {
-      if (token !== speakToken) return; // superseded — ignore
-      stopMouthFlap();
+      if (token !== speakToken) return;
       backToIdle();
     }, ms);
   }
 
   function backToIdle() {
+    clearMutedTimer();
     setState("idle");
-    setStatus("Tap me to talk again! 🐾");
+    setStatus("Tap me to talk again! 👑");
   }
 
-  // Toggle the .mouth-open class ~7x/second for a talking effect.
-  function startMouthFlap() {
-    stopMouthFlap();
-    const mouth = document.getElementById("cat-mouth");
-    if (!mouth) return;
-    let open = false;
-    mouthTimer = window.setInterval(function () {
-      open = !open;
-      mouth.classList.toggle("mouth-open", open);
-    }, MOUTH_FLAP_MS);
-  }
-
-  function stopMouthFlap() {
-    if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null; }
+  function clearMutedTimer() {
     if (mutedStopTimer) { clearTimeout(mutedStopTimer); mutedStopTimer = null; }
-    const mouth = document.getElementById("cat-mouth");
-    if (mouth) mouth.classList.remove("mouth-open");
   }
 
   /* ===========================================================================
    *  SOUND EFFECTS (optional placeholder hooks)
    * =========================================================================*/
 
-  // playSfx("start" | "stop" | "idle"). Silently does nothing if the file is
-  // missing or the user is muted. Drop real audio in assets/sfx/ to enable.
   function playSfx(name) {
     if (isMuted) return;
     const src = ASSETS.sfx[name];
     if (!src) return;
-
-    // Cache an Audio element per name; remember failures so we don't retry.
     if (sfxCache[name] === false) return;
     if (!sfxCache[name]) {
       const audio = new Audio();
@@ -431,7 +400,7 @@
       if (a && a !== false) {
         a.currentTime = 0;
         const p = a.play();
-        if (p && p.catch) p.catch(function () { /* autoplay/file issues: ignore */ });
+        if (p && p.catch) p.catch(function () { /* ignore */ });
       }
     } catch (e) { /* ignore */ }
   }
@@ -440,19 +409,17 @@
    *  UI STATE HELPERS
    * =========================================================================*/
 
-  function onCatActivate() {
+  function onActivate() {
     switch (state) {
       case "unsupported":
-        // Listening isn't available — still give friendly spoken feedback.
         speakUnsupportedHint();
         break;
       case "listening":
-        stopListening();      // tap again to cancel listening
+        stopListening();
         break;
       case "talking":
-        speakToken++;         // invalidate the in-flight utterance's callbacks
+        speakToken++;
         if (synth) synth.cancel();
-        stopMouthFlap();
         backToIdle();
         break;
       default: // idle / error
@@ -461,7 +428,7 @@
   }
 
   function speakUnsupportedHint() {
-    const line = "Hi! I'm Tom. To talk with me, please open this in Chrome or Edge!";
+    const line = "Hi! I'm Princess Mariam. To chat with me, please open this in Chrome or Edge, cutie!";
     showBubble(line);
     announce(line);
     if (synth && !isMuted) {
@@ -472,12 +439,9 @@
         if (!chosenVoice) chosenVoice = pickVoice(synth.getVoices() || []);
         if (chosenVoice) u.voice = chosenVoice;
         u.lang   = (chosenVoice && chosenVoice.lang) || RECOGNITION_LANG;
-        u.pitch  = TOM_PITCH;
-        u.rate   = TOM_RATE;
-        u.volume = TOM_VOLUME;
-        u.onstart = function () { if (token === speakToken) startMouthFlap(); };
-        u.onend   = function () { if (token === speakToken) stopMouthFlap(); };
-        u.onerror = function () { if (token === speakToken) stopMouthFlap(); };
+        u.pitch  = VOICE_PITCH;
+        u.rate   = VOICE_RATE;
+        u.volume = VOICE_VOLUME;
         synth.speak(u);
       } catch (e) { /* ignore */ }
     }
@@ -488,13 +452,9 @@
     els.mute.setAttribute("aria-pressed", String(isMuted));
     els.mute.textContent = isMuted ? "🔇 Sound off" : "🔊 Sound on";
     if (isMuted && synth) {
-      speakToken++;            // invalidate in-flight utterance callbacks
+      speakToken++;
       synth.cancel();
-      // Don't rely on a possibly-missing cancel->onend: clean up ourselves.
-      if (state === "talking") {
-        stopMouthFlap();
-        backToIdle();
-      }
+      if (state === "talking") backToIdle();
     }
   }
 
@@ -507,13 +467,16 @@
   function setState(next) {
     state = next;
     els.body.className = "state-" + next;
+    // Swap the character animation if a dedicated clip exists for this state.
+    if (next === "listening" || next === "talking" || next === "idle") {
+      setClip(next);
+    }
   }
 
   function setStatus(text) {
     if (els.status) els.status.textContent = text;
   }
 
-  // Visual speech bubble (decorative; aria-hidden in the HTML).
   function showBubble(text) {
     if (!els.bubble) return;
     els.bubble.textContent = text;
@@ -526,12 +489,10 @@
     els.bubble.textContent = "";
   }
 
-  // Announce Tom's reply through a permanent screen-reader live region so it is
-  // reliably read aloud (the visual bubble alone isn't a dependable live region).
   function announce(text) {
     if (!els.srLive) return;
-    els.srLive.textContent = "";       // force re-announcement of repeated text
-    els.srLive.textContent = "Tom says: " + text;
+    els.srLive.textContent = "";
+    els.srLive.textContent = "Mariam says: " + text;
   }
 
 })();
