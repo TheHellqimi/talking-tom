@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Note: pinch-zoom is intentionally left enabled for accessibility. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#7cc7ff" />
+  <title>Tom the Talking Cat 🐱</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<!-- body class drives the visual state machine: state-idle | state-listening | state-talking | state-error | state-unsupported -->
+<body class="state-idle">
+
+  <main class="stage">
+
+    <h1 class="title">Tom the Talking Cat</h1>
+
+    <!-- ===================================================================
+         THE CAT  —  the whole thing is one big tap target (a <button>).
+         The mouth (#cat-mouth) is animated open/closed while Tom talks.
+         The ears (#cat-ear-left / #cat-ear-right) twitch while listening.
+         Swap this SVG for your own art any time — just keep the same ids.
+    ==================================================================== -->
+    <button id="cat" class="cat" type="button" aria-label="Tap Tom the cat to talk to him">
+      <span class="cat-ring" aria-hidden="true"></span>
+
+      <svg class="cat-svg" viewBox="0 0 240 250" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+
+        <!-- Ears (twitch while listening) -->
+        <g id="cat-ear-left" class="cat-ear">
+          <polygon points="58,92 44,22 116,66" fill="#9c6b3f"/>
+          <polygon points="66,86 58,42 104,68" fill="#f4b3c2"/>
+        </g>
+        <g id="cat-ear-right" class="cat-ear">
+          <polygon points="182,92 196,22 124,66" fill="#9c6b3f"/>
+          <polygon points="174,86 182,42 136,68" fill="#f4b3c2"/>
+        </g>
+
+        <!-- Head -->
+        <ellipse cx="120" cy="138" rx="82" ry="74" fill="#b07c4a"/>
+        <!-- Lighter muzzle / cheeks -->
+        <ellipse cx="120" cy="160" rx="62" ry="50" fill="#e7c79a"/>
+
+        <!-- Eyes -->
+        <g class="cat-eyes">
+          <ellipse cx="92"  cy="124" rx="17" ry="21" fill="#ffffff"/>
+          <ellipse cx="148" cy="124" rx="17" ry="21" fill="#ffffff"/>
+          <ellipse class="cat-pupil" cx="94"  cy="126" rx="8" ry="13" fill="#2b2b2b"/>
+          <ellipse class="cat-pupil" cx="150" cy="126" rx="8" ry="13" fill="#2b2b2b"/>
+          <circle cx="90"  cy="120" r="3.2" fill="#ffffff"/>
+          <circle cx="146" cy="120" r="3.2" fill="#ffffff"/>
+        </g>
+
+        <!-- Nose -->
+        <path d="M111 152 H129 L120 163 Z" fill="#d76a7a"/>
+
+        <!-- Whiskers -->
+        <g stroke="#7a5535" stroke-width="2.4" stroke-linecap="round">
+          <line x1="60"  y1="158" x2="18"  y2="150"/>
+          <line x1="60"  y1="166" x2="16"  y2="170"/>
+          <line x1="60"  y1="174" x2="20"  y2="188"/>
+          <line x1="180" y1="158" x2="222" y2="150"/>
+          <line x1="180" y1="166" x2="224" y2="170"/>
+          <line x1="180" y1="174" x2="220" y2="188"/>
+        </g>
+
+        <!-- Mouth: a smile line + an opening that scales while talking.
+             #cat-mouth gets the .mouth-open class toggled by app.js -->
+        <path d="M120 163 V172" stroke="#7a5535" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M100 174 Q120 190 140 174" fill="none" stroke="#7a5535" stroke-width="3" stroke-linecap="round"/>
+        <ellipse id="cat-mouth" class="cat-mouth" cx="120" cy="180" rx="15" ry="3" fill="#5a2b34"/>
+        <ellipse id="cat-tongue" class="cat-tongue" cx="120" cy="184" rx="9" ry="4" fill="#ef7c8e"/>
+      </svg>
+    </button>
+
+    <!-- Live status line for everyone (also read by screen readers) -->
+    <p id="status" class="status" role="status" aria-live="polite">Tap me to talk! 🐾</p>
+
+    <!-- Speech bubble shows Tom's written reply visually (works even when muted).
+         It's decorative for screen readers — the reply is announced via #sr-live. -->
+    <p id="bubble" class="bubble" aria-hidden="true" hidden></p>
+
+    <!-- Permanent, visually-hidden live region: reliably announces Tom's reply. -->
+    <p id="sr-live" class="sr-only" role="status" aria-live="polite"></p>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="mute" class="control-btn" type="button" aria-pressed="false">🔊 Sound on</button>
+    </div>
+
+    <!-- Shown only when the browser can't do speech recognition -->
+    <div id="unsupported" class="unsupported" hidden>
+      <p>😿 <strong>Listening works best in Chrome or Edge.</strong></p>
+      <p>This browser can't hear you. Please open this page in <strong>Chrome</strong>, <strong>Edge</strong>, or <strong>Opera</strong> on a computer or Android phone, and allow the microphone.</p>
+    </div>
+
+    <p class="hint">Tip: tap Tom, then say "hello", "what's your name", or "tell me a joke".</p>
+
+  </main>
+
+  <!-- Config first (so app.js can read window.RESPONSES), then the app. -->
+  <script src="responses.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
