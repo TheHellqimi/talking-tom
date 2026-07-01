@@ -167,10 +167,10 @@ body.state-listening::after {
   50%      { box-shadow: inset 0 0 70px 10px rgba(130,205,255,.5); }
 }
 
-/* Talking: gentle brightness pulse on Mariam (no transform, so she stays
-   aligned with the background). Replace with a real talking clip later. */
-.state-talking .char-video { animation: talk-glow .5s ease-in-out infinite; }
-@keyframes talk-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.13); } }
+/* Talking: a second video (same scene, mouth moving) stacked over idle and
+   cross-faded in only while Mariam speaks. Same scene → seamless swap. */
+.char-video--talking { opacity: 0; transition: opacity .16s ease; }
+.state-talking #char-video-talking { opacity: 1; }
 
 /* Error: quick shake */
 .state-error .char-video { animation: err-shake .4s ease; }
@@ -218,4 +218,5 @@ body.state-listening::after {
   .char-video,
   body.state-listening::after,
   .bubble { animation: none !important; }
+  .char-video--talking { transition: none; }
 }

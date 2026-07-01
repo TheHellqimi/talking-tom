@@ -32,13 +32,11 @@
   const MUTED_MIN_MS = 1000;
   const MUTED_MAX_MS = 5000;
 
-  // Character animation per state. null = fall back to the idle clip.
-  // As you render more animations, drop them in assets/video/ and set them here.
-  const CLIPS = {
-    idle:      "assets/video/mariam-idle.mp4",
-    listening: null,   // e.g. "assets/video/mariam-listening.mp4"
-    talking:   null    // e.g. "assets/video/mariam-talking.mp4"
-  };
+  // The character uses two stacked <video> layers in index.html:
+  //   #char-video          — idle loop, always playing (base layer)
+  //   #char-video-talking  — talking loop, faded in only while she speaks
+  // To add more states (e.g. listening), add another stacked <video> + a
+  // .state-<name> rule in styles.css, and drive it from updateCharacterVideo().
 
   // Optional sound-effect paths (all OPTIONAL — missing files fail silently).
   const ASSETS = {
@@ -69,7 +67,6 @@
   let errorHandled = false;  // did onerror already set a message this round?
   let pendingReply = null;   // reply to speak once recognition fully ends (no echo)
   let mutedStopTimer = null; // timeout id for ending a muted "talking" run
-  let currentClip = null;    // which clip src is loaded in the video element
   // Monotonic token: every new utterance bumps it. Async speech callbacks check
   // they still own the latest token before touching state, so a cancelled
   // utterance's late onstart/onend can't clobber a newer one.
@@ -88,15 +85,14 @@
     els.body        = document.body;
     els.tap         = document.getElementById("tap");
     els.video       = document.getElementById("char-video");
+    els.videoTalking = document.getElementById("char-video-talking");
     els.status      = document.getElementById("status");
     els.bubble      = document.getElementById("bubble");
     els.srLive      = document.getElementById("sr-live");
     els.mute        = document.getElementById("mute");
     els.unsupported = document.getElementById("unsupported");
 
-    currentClip = CLIPS.idle;
-
-    // Some browsers pause muted autoplay until interaction; nudge it.
+    // Some browsers pause muted autoplay until interaction; nudge the idle clip.
     if (els.video && els.video.play) {
       const p = els.video.play();
       if (p && p.catch) p.catch(function () { /* will play on first tap */ });
@@ -123,18 +119,20 @@
   }
 
   /* ===========================================================================
-   *  CHARACTER VIDEO  (swap clip per state; falls back to idle)
+   *  CHARACTER VIDEO  (idle base layer + talking layer faded in while speaking)
    * =========================================================================*/
 
-  function setClip(forState) {
-    if (!els.video) return;
-    const src = CLIPS[forState] || CLIPS.idle;
-    if (!src || src === currentClip) return; // nothing to change
-    currentClip = src;
-    els.video.src = src;
-    els.video.load();
-    const p = els.video.play();
-    if (p && p.catch) p.catch(function () { /* ignore */ });
+  // The talking clip is a separate stacked <video>. CSS fades it in whenever the
+  // body has .state-talking; here we start/stop its playback to match.
+  function updateCharacterVideo(forState) {
+    if (!els.videoTalking) return;
+    if (forState === "talking") {
+      try { els.videoTalking.currentTime = 0; } catch (e) { /* not seekable yet */ }
+      const p = els.videoTalking.play();
+      if (p && p.catch) p.catch(function () { /* ignore */ });
+    } else {
+      try { els.videoTalking.pause(); } catch (e) { /* ignore */ }
+    }
   }
 
   /* ===========================================================================
@@ -467,10 +465,7 @@
   function setState(next) {
     state = next;
     els.body.className = "state-" + next;
-    // Swap the character animation if a dedicated clip exists for this state.
-    if (next === "listening" || next === "talking" || next === "idle") {
-      setClip(next);
-    }
+    updateCharacterVideo(next);
   }
 
   function setStatus(text) {

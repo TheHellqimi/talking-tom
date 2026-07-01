@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#2a1a12" />
   <title>Mariam the Talking Princess 👑</title>
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 
 <!-- body class drives the visual state: state-idle | state-listening | state-talking | state-error | state-unsupported -->
@@ -23,6 +23,13 @@
            autoplay loop muted playsinline preload="auto"
            poster="assets/img/mariam-poster.jpg?v=4" aria-hidden="true">
       <source src="assets/video/mariam-idle.mp4?v=4" type="video/mp4" />
+    </video>
+
+    <!-- Talking layer: same scene with mouth movement. Faded in (by CSS) and
+         played (by app.js) only while Mariam is speaking; loops for long replies. -->
+    <video id="char-video-talking" class="char-video char-video--talking"
+           loop muted playsinline preload="auto" aria-hidden="true">
+      <source src="assets/video/mariam-talking.mp4?v=1" type="video/mp4" />
     </video>
 
     <!-- The whole screen is the tap target -->
@@ -60,7 +67,7 @@
   </main>
 
   <!-- Config first (so app.js can read window.RESPONSES), then the app. -->
-  <script src="responses.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="responses.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
