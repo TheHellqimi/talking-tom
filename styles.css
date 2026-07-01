@@ -132,6 +132,45 @@ body {
 }
 @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+/* Text input (type instead of / as well as talking) */
+.text-form {
+  pointer-events: auto;
+  display: flex;
+  gap: 8px;
+  width: min(92vw, 460px);
+}
+.text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px; /* >=16px avoids iOS zoom-on-focus */
+  color: var(--ink);
+  background: rgba(255,255,255,.96);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  outline: none;
+}
+.text-input::placeholder { color: #8a95a0; }
+.text-input:focus-visible { box-shadow: 0 0 0 3px #ffd27a, 0 4px 14px rgba(0,0,0,.4); }
+.text-send {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  transition: transform .08s ease;
+}
+.text-send:active { transform: translateY(2px); }
+.text-send:focus-visible { outline: 3px solid #ffd27a; outline-offset: 2px; }
+
 .controls { pointer-events: none; }
 .control-btn {
   pointer-events: auto;

@@ -90,6 +90,8 @@
     els.bubble      = document.getElementById("bubble");
     els.srLive      = document.getElementById("sr-live");
     els.mute        = document.getElementById("mute");
+    els.textForm    = document.getElementById("text-form");
+    els.textInput   = document.getElementById("text-input");
     els.unsupported = document.getElementById("unsupported");
 
     // Some browsers pause muted autoplay until interaction; nudge the idle clip.
@@ -100,6 +102,9 @@
 
     els.tap.addEventListener("click", onActivate);
     els.mute.addEventListener("click", toggleMute);
+    // Texting works in every browser (no mic needed) — wire it before the
+    // SpeechRecognition support check below.
+    if (els.textForm) els.textForm.addEventListener("submit", onTextSubmit);
 
     if (synth) {
       loadVoices();
@@ -284,6 +289,27 @@
   }
 
   /* ===========================================================================
+   *  TEXT INPUT  (type instead of talking; she still replies with voice)
+   * =========================================================================*/
+
+  function onTextSubmit(event) {
+    event.preventDefault();
+    const text = ((els.textInput && els.textInput.value) || "").trim();
+    if (!text) return;
+    els.textInput.value = "";
+    els.textInput.blur(); // dismiss the on-screen keyboard on mobile
+    handleTextInput(text);
+  }
+
+  function handleTextInput(text) {
+    // If the mic is currently listening, stop it — the typed message wins.
+    if (recognizing) { try { recognition.abort(); } catch (e) { /* ignore */ } }
+    pendingReply = null;
+    const reply = matchResponse(text);
+    speak(reply); // shows the bubble, speaks aloud, and plays the talking animation
+  }
+
+  /* ===========================================================================
    *  SPEECH SYNTHESIS (talking)
    * =========================================================================*/
 
@@ -410,6 +436,7 @@
   function onActivate() {
     switch (state) {
       case "unsupported":
+        if (els.textInput) els.textInput.focus(); // no mic — nudge them to type
         speakUnsupportedHint();
         break;
       case "listening":
@@ -426,7 +453,7 @@
   }
 
   function speakUnsupportedHint() {
-    const line = "Hi! I'm Princess Mariam. To chat with me, please open this in Chrome or Edge, cutie!";
+    const line = "Hi! I'm Princess Mariam. Your browser can't hear you, but type to me below and I'll talk right back, cutie!";
     showBubble(line);
     announce(line);
     if (synth && !isMuted) {
@@ -458,7 +485,7 @@
 
   function enterUnsupported() {
     setState("unsupported");
-    setStatus("Tap me to say hi! 👋");
+    setStatus("No mic? Type to me below, cutie! 👑");
     if (els.unsupported) els.unsupported.hidden = false;
   }
 

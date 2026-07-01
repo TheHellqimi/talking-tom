@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#2a1a12" />
   <title>Mariam the Talking Princess 👑</title>
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 
 <!-- body class drives the visual state: state-idle | state-listening | state-talking | state-error | state-unsupported -->
@@ -48,11 +48,19 @@
 
       <p id="status" class="status" role="status" aria-live="polite">Tap me to talk! 👑</p>
 
+      <!-- Type instead of talking (works in every browser; she replies with voice) -->
+      <form id="text-form" class="text-form" autocomplete="off">
+        <input id="text-input" class="text-input" type="text"
+               placeholder="…or type to me here" maxlength="200"
+               aria-label="Type a message to Mariam" enterkeyhint="send" />
+        <button id="text-send" class="text-send" type="submit" aria-label="Send message">Send</button>
+      </form>
+
       <div class="controls">
         <button id="mute" class="control-btn" type="button" aria-pressed="false">🔊 Sound on</button>
       </div>
 
-      <p class="hint">Tip: tap Mariam, then say "hi", "what's your name", or "tell me a joke".</p>
+      <p class="hint">Tap Mariam to talk 🎤 — or type above (works in any browser). Try "hi", "what's your name", or "tell me a joke".</p>
     </div>
 
     <!-- Permanent, visually-hidden live region: reliably announces her reply. -->
@@ -60,14 +68,14 @@
 
     <!-- Shown only when the browser can't do speech recognition -->
     <div id="unsupported" class="unsupported" hidden>
-      <p>👑 <strong>Talking works best in Chrome or Edge.</strong></p>
-      <p>This browser can't hear you. Please open this page in <strong>Chrome</strong>, <strong>Edge</strong>, or <strong>Opera</strong> and allow the microphone.</p>
+      <p>👑 <strong>This browser can't hear you</strong> — but you can still chat!</p>
+      <p>Type to Mariam in the box below and she'll talk back. For voice input, use <strong>Chrome</strong> or <strong>Edge</strong>.</p>
     </div>
 
   </main>
 
   <!-- Config first (so app.js can read window.RESPONSES), then the app. -->
-  <script src="responses.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="responses.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
