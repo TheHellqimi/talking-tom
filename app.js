@@ -156,11 +156,51 @@
     return ((d && isFinite(d) && d > 0) ? d : fallbackSec) * 1000;
   }
 
-  // Reveal one talk layer (or null = show the idle base beneath).
-  function showTalkLayer(name) {
-    if (els.vIntro) els.vIntro.style.opacity = (name === "intro") ? "1" : "0";
-    if (els.vLoop)  els.vLoop.style.opacity  = (name === "loop")  ? "1" : "0";
-    if (els.vOutro) els.vOutro.style.opacity = (name === "outro") ? "1" : "0";
+  // Cross-fade duration for the idle<->talk boundaries (kept subtle).
+  const TALK_FADE_MS = 160;
+  let fadeTimer = null;
+
+  function clearFade() { if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; } }
+
+  // Ramp one layer's opacity from->to over ms with a timer. (setInterval keeps
+  // running where CSS opacity transitions get throttled, e.g. headless render.)
+  function rampOpacity(el, from, to, ms) {
+    clearFade();
+    if (!el) return;
+    el.style.transition = "none";
+    el.style.opacity = String(from);
+    const steps = 8;
+    let i = 0;
+    fadeTimer = window.setInterval(function () {
+      i++;
+      el.style.opacity = String(from + (to - from) * (i / steps));
+      if (i >= steps) { el.style.opacity = String(to); clearFade(); }
+    }, Math.max(18, Math.round(ms / steps)));
+  }
+
+  // Instant swap between talk layers. Used for the pose-matched intro->loop and
+  // loop->outro boundaries, where a hard cut is seamless and a fade would let the
+  // idle base bleed through. (null = hide all instantly.)
+  function hardLayer(name) {
+    clearFade();
+    if (els.vIntro) { els.vIntro.style.transition = "none"; els.vIntro.style.opacity = (name === "intro") ? "1" : "0"; }
+    if (els.vLoop)  { els.vLoop.style.transition  = "none"; els.vLoop.style.opacity  = (name === "loop")  ? "1" : "0"; }
+    if (els.vOutro) { els.vOutro.style.transition = "none"; els.vOutro.style.opacity = (name === "outro") ? "1" : "0"; }
+  }
+
+  // Cross-dissolve idle -> intro at the start of talking (smooths the snap
+  // between the looping idle and the transition clip).
+  function fadeInIntro() {
+    if (els.vLoop)  { els.vLoop.style.transition  = "none"; els.vLoop.style.opacity  = "0"; }
+    if (els.vOutro) { els.vOutro.style.transition = "none"; els.vOutro.style.opacity = "0"; }
+    rampOpacity(els.vIntro, 0, 1, TALK_FADE_MS);
+  }
+
+  // Cross-dissolve outro -> idle at the end of talking.
+  function fadeOutToIdle() {
+    if (els.vIntro) { els.vIntro.style.transition = "none"; els.vIntro.style.opacity = "0"; }
+    if (els.vLoop)  { els.vLoop.style.transition  = "none"; els.vLoop.style.opacity  = "0"; }
+    rampOpacity(els.vOutro, 1, 0, TALK_FADE_MS);
   }
 
   function startTalkAnim(voiceMs) {
@@ -185,7 +225,7 @@
     els.vIntro.playbackRate = 1;
     els.vIntro.onended = function () { advanceFromIntro(gen); };
     try { els.vIntro.currentTime = 0; } catch (e) {}
-    showTalkLayer("intro");
+    fadeInIntro(); // cross-dissolve idle -> intro
     safePlay(els.vIntro);
     // Watchdog: if 'ended' never fires (throttling / dropped event), advance anyway.
     window.setTimeout(function () { advanceFromIntro(gen); }, introMs + 300);
@@ -201,7 +241,7 @@
   function playTalkLoop(gen) {
     if (gen !== talkGen) return;
     talkPhase = "loop";
-    showTalkLayer("loop");
+    hardLayer("loop"); // instant, pose-matched cut from the intro
     const loopMs = clipDurationMs(els.vLoop, 1.67);
     let done = 0;
     const restart = function () {
@@ -237,7 +277,7 @@
     els.vOutro.playbackRate = 1;
     els.vOutro.onended = function () { finishTalkAnim(gen); };
     try { els.vOutro.currentTime = 0; } catch (e) {}
-    showTalkLayer("outro");
+    hardLayer("outro"); // instant, pose-matched cut from the loop
     safePlay(els.vOutro);
     window.setTimeout(function () {
       if (gen === talkGen && talkPhase === "outro") finishTalkAnim(gen);
@@ -251,8 +291,12 @@
     // Reset idle to its rest pose (frame 0 = the outro's last frame) so the
     // reveal lines up; it was hidden, so the reset itself isn't visible.
     try { els.video.currentTime = 0; } catch (e) {}
-    showTalkLayer(null);
-    try { els.vIntro.pause(); els.vLoop.pause(); els.vOutro.pause(); } catch (e) {}
+    fadeOutToIdle(); // cross-dissolve outro -> idle
+    // Pause the transition clips after the fade finishes (leave them showing
+    // their last frame while it dissolves).
+    window.setTimeout(function () {
+      try { els.vIntro.pause(); els.vLoop.pause(); els.vOutro.pause(); } catch (e) {}
+    }, TALK_FADE_MS + 40);
     backToIdle();
   }
 
@@ -261,7 +305,7 @@
     talkGen++; // invalidate any pending phase callbacks
     talkPhase = "idle";
     if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
-    showTalkLayer(null);
+    hardLayer(null); // interrupts hide instantly (no fade)
     if (els.vIntro) try { els.vIntro.pause(); } catch (e) {}
     if (els.vLoop)  try { els.vLoop.pause(); } catch (e) {}
     if (els.vOutro) try { els.vOutro.pause(); } catch (e) {}
