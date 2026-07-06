@@ -206,10 +206,10 @@ body.state-listening::after {
   50%      { box-shadow: inset 0 0 70px 10px rgba(130,205,255,.5); }
 }
 
-/* Talking: a second video (same scene, mouth moving) stacked over idle and
-   cross-faded in only while Mariam speaks. Same scene → seamless swap. */
-.char-video--talking { opacity: 0; transition: opacity .16s ease; }
-.state-talking #char-video-talking { opacity: 1; }
+/* Talking sequence layers (intro / loop / outro), stacked over the idle base.
+   app.js sets one layer's opacity to 1 at a time. The phase boundaries are
+   pose-matched, so an instant swap (no transition) reads as a seamless cut. */
+.talk-layer { z-index: 2; opacity: 0; }
 
 /* Error: quick shake */
 .state-error .char-video { animation: err-shake .4s ease; }
@@ -257,5 +257,4 @@ body.state-listening::after {
   .char-video,
   body.state-listening::after,
   .bubble { animation: none !important; }
-  .char-video--talking { transition: none; }
 }

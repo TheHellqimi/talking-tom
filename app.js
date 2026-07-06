@@ -32,11 +32,13 @@
   const MUTED_MIN_MS = 1000;
   const MUTED_MAX_MS = 5000;
 
-  // The character uses two stacked <video> layers in index.html:
-  //   #char-video          — idle loop, always playing (base layer)
-  //   #char-video-talking  — talking loop, faded in only while she speaks
-  // To add more states (e.g. listening), add another stacked <video> + a
-  // .state-<name> rule in styles.css, and drive it from updateCharacterVideo().
+  // The character uses stacked <video> layers in index.html:
+  //   #char-video  — idle loop, always playing (base layer)
+  //   #v-intro     — idle -> talking transition (plays once)
+  //   #v-loop      — seamless talking loop (repeats while she speaks)
+  //   #v-outro     — talking -> idle transition (plays once)
+  // The talk sequence (intro -> loop×N -> outro -> idle) is driven by speech
+  // via startTalkAnim() / endTalkAnim() below.
 
   // Optional sound-effect paths (all OPTIONAL — missing files fail silently).
   const ASSETS = {
@@ -71,6 +73,11 @@
   // they still own the latest token before touching state, so a cancelled
   // utterance's late onstart/onend can't clobber a newer one.
   let speakToken = 0;
+  // Talk-animation phase machine (idle -> intro -> loop -> outro -> idle).
+  let talkPhase = "idle";     // idle | intro | loop | outro
+  let talkVoiceEnded = false; // has the voice finished (so we should play the outro)?
+  let talkGen = 0;            // bumped per sequence to invalidate stale clip callbacks
+  let loopKeepAlive = null;   // interval id that keeps the talk loop repeating
   const sfxCache = {};
 
   const els = {};
@@ -85,7 +92,9 @@
     els.body        = document.body;
     els.tap         = document.getElementById("tap");
     els.video       = document.getElementById("char-video");
-    els.videoTalking = document.getElementById("char-video-talking");
+    els.vIntro      = document.getElementById("v-intro");
+    els.vLoop       = document.getElementById("v-loop");
+    els.vOutro      = document.getElementById("v-outro");
     els.status      = document.getElementById("status");
     els.bubble      = document.getElementById("bubble");
     els.srLive      = document.getElementById("sr-live");
@@ -124,20 +133,111 @@
   }
 
   /* ===========================================================================
-   *  CHARACTER VIDEO  (idle base layer + talking layer faded in while speaking)
+   *  TALK ANIMATION  (idle -> intro -> loop×N -> outro -> idle)
+   *  Three stacked layers over the idle base; exactly one is shown at a time.
+   *  startTalkAnim() when speech begins, endTalkAnim() when it ends. The loop
+   *  repeats until the voice finishes, so it fits replies of any length.
    * =========================================================================*/
 
-  // The talking clip is a separate stacked <video>. CSS fades it in whenever the
-  // body has .state-talking; here we start/stop its playback to match.
-  function updateCharacterVideo(forState) {
-    if (!els.videoTalking) return;
-    if (forState === "talking") {
-      try { els.videoTalking.currentTime = 0; } catch (e) { /* not seekable yet */ }
-      const p = els.videoTalking.play();
-      if (p && p.catch) p.catch(function () { /* ignore */ });
-    } else {
-      try { els.videoTalking.pause(); } catch (e) { /* ignore */ }
+  function safePlay(v) {
+    try { const p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* ignore */ }
+  }
+
+  // A clip's duration in ms (with a fallback if it isn't loaded/known yet).
+  function clipDurationMs(v, fallbackSec) {
+    const d = v && v.duration;
+    return ((d && isFinite(d) && d > 0) ? d : fallbackSec) * 1000;
+  }
+
+  // Reveal one talk layer (or null = show the idle base beneath).
+  function showTalkLayer(name) {
+    if (els.vIntro) els.vIntro.style.opacity = (name === "intro") ? "1" : "0";
+    if (els.vLoop)  els.vLoop.style.opacity  = (name === "loop")  ? "1" : "0";
+    if (els.vOutro) els.vOutro.style.opacity = (name === "outro") ? "1" : "0";
+  }
+
+  function startTalkAnim() {
+    if (!els.vIntro || !els.vLoop || !els.vOutro) return; // no clips -> idle stays
+    const gen = ++talkGen;
+    talkVoiceEnded = false;
+    talkPhase = "intro";
+    if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
+    try { els.vLoop.pause(); els.vOutro.pause(); } catch (e) {}
+    els.vIntro.onended = function () { advanceFromIntro(gen); };
+    try { els.vIntro.currentTime = 0; } catch (e) {}
+    showTalkLayer("intro");
+    safePlay(els.vIntro);
+    // Watchdog: if 'ended' never fires (throttling / dropped event), advance anyway.
+    window.setTimeout(function () { advanceFromIntro(gen); }, clipDurationMs(els.vIntro, 1.1) + 300);
+  }
+
+  function advanceFromIntro(gen) {
+    if (gen !== talkGen || talkPhase !== "intro") return; // already advanced / stale
+    if (talkVoiceEnded) playTalkOutro(gen); else playTalkLoop(gen);
+  }
+
+  function playTalkLoop(gen) {
+    if (gen !== talkGen) return;
+    talkPhase = "loop";
+    showTalkLayer("loop");
+    const restart = function () { try { els.vLoop.currentTime = 0; } catch (e) {} safePlay(els.vLoop); };
+    els.vLoop.onended = function () { if (gen === talkGen && talkPhase === "loop") restart(); };
+    restart();
+    // Keep-alive: if a loop iteration stalls or 'ended' is dropped, nudge it back.
+    if (loopKeepAlive) clearInterval(loopKeepAlive);
+    loopKeepAlive = window.setInterval(function () {
+      if (gen !== talkGen || talkPhase !== "loop") { clearInterval(loopKeepAlive); loopKeepAlive = null; return; }
+      if (els.vLoop.paused || els.vLoop.ended) restart();
+    }, 200);
+  }
+
+  // Voice finished: run the outro from wherever we are, then settle to idle.
+  function endTalkAnim() {
+    talkVoiceEnded = true;
+    if (talkPhase === "loop") {
+      playTalkOutro(talkGen);
+    } else if (talkPhase === "idle") {
+      backToIdle(); // no animation running (e.g. clips missing) — just settle
     }
+    // talkPhase "intro": advanceFromIntro routes to the outro (talkVoiceEnded=true).
+    // talkPhase "outro": already finishing.
+  }
+
+  function playTalkOutro(gen) {
+    if (gen !== talkGen) return;
+    talkPhase = "outro";
+    if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
+    try { els.vLoop.pause(); } catch (e) {}
+    els.vOutro.onended = function () { finishTalkAnim(gen); };
+    try { els.vOutro.currentTime = 0; } catch (e) {}
+    showTalkLayer("outro");
+    safePlay(els.vOutro);
+    window.setTimeout(function () {
+      if (gen === talkGen && talkPhase === "outro") finishTalkAnim(gen);
+    }, clipDurationMs(els.vOutro, 1.1) + 300);
+  }
+
+  function finishTalkAnim(gen) {
+    if (gen !== talkGen) return;
+    talkPhase = "idle";
+    if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
+    // Reset idle to its rest pose (frame 0 = the outro's last frame) so the
+    // reveal lines up; it was hidden, so the reset itself isn't visible.
+    try { els.video.currentTime = 0; } catch (e) {}
+    showTalkLayer(null);
+    try { els.vIntro.pause(); els.vLoop.pause(); els.vOutro.pause(); } catch (e) {}
+    backToIdle();
+  }
+
+  // Hard cancel (an interrupt) -> jump straight back to the idle base.
+  function stopTalkAnim() {
+    talkGen++; // invalidate any pending phase callbacks
+    talkPhase = "idle";
+    if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
+    showTalkLayer(null);
+    if (els.vIntro) try { els.vIntro.pause(); } catch (e) {}
+    if (els.vLoop)  try { els.vLoop.pause(); } catch (e) {}
+    if (els.vOutro) try { els.vOutro.pause(); } catch (e) {}
   }
 
   /* ===========================================================================
@@ -195,6 +295,7 @@
     speakToken++;            // invalidate any in-flight speech callbacks
     if (synth) synth.cancel();
     clearMutedTimer();
+    stopTalkAnim();
     hideBubble();
 
     try {
@@ -362,13 +463,15 @@
         if (token !== speakToken) return;
         setState("talking");
         setStatus("");
+        startTalkAnim();
       };
       utter.onend = function () {
         if (token !== speakToken) return;
-        backToIdle();
+        endTalkAnim(); // plays the outro, then returns to idle
       };
       utter.onerror = function () {
         if (token !== speakToken) return;
+        stopTalkAnim();
         backToIdle();
       };
 
@@ -382,6 +485,7 @@
   function speakMuted(text, token) {
     setState("talking");
     setStatus("");
+    startTalkAnim();
     const ms = Math.min(
       MUTED_MAX_MS,
       Math.max(MUTED_MIN_MS, (text ? text.length : 20) * MUTED_MS_PER_CHAR)
@@ -389,7 +493,7 @@
     clearMutedTimer();
     mutedStopTimer = window.setTimeout(function () {
       if (token !== speakToken) return;
-      backToIdle();
+      endTalkAnim(); // plays the outro, then returns to idle
     }, ms);
   }
 
@@ -445,6 +549,7 @@
       case "talking":
         speakToken++;
         if (synth) synth.cancel();
+        stopTalkAnim();
         backToIdle();
         break;
       default: // idle / error
@@ -479,7 +584,7 @@
     if (isMuted && synth) {
       speakToken++;
       synth.cancel();
-      if (state === "talking") backToIdle();
+      if (state === "talking") { stopTalkAnim(); backToIdle(); }
     }
   }
 
@@ -492,7 +597,6 @@
   function setState(next) {
     state = next;
     els.body.className = "state-" + next;
-    updateCharacterVideo(next);
   }
 
   function setStatus(text) {

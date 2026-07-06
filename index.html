@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#2a1a12" />
   <title>Mariam the Talking Princess 👑</title>
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 
 <!-- body class drives the visual state: state-idle | state-listening | state-talking | state-error | state-unsupported -->
@@ -25,11 +25,17 @@
       <source src="assets/video/mariam-idle.mp4?v=4" type="video/mp4" />
     </video>
 
-    <!-- Talking layer: same scene with mouth movement. Faded in (by CSS) and
-         played (by app.js) only while Mariam is speaking; loops for long replies. -->
-    <video id="char-video-talking" class="char-video char-video--talking"
-           loop muted playsinline preload="auto" aria-hidden="true">
-      <source src="assets/video/mariam-talking.mp4?v=2" type="video/mp4" />
+    <!-- Talking sequence: three stacked layers over idle, driven by app.js.
+         intro (idle->talk) plays once, loop repeats for as long as she speaks,
+         outro (talk->idle) plays once. Same scene, pose-matched boundaries. -->
+    <video id="v-intro" class="char-video talk-layer" muted playsinline preload="auto" aria-hidden="true">
+      <source src="assets/video/mariam-talk-intro.mp4?v=1" type="video/mp4" />
+    </video>
+    <video id="v-loop" class="char-video talk-layer" muted playsinline preload="auto" aria-hidden="true">
+      <source src="assets/video/mariam-talk-loop.mp4?v=1" type="video/mp4" />
+    </video>
+    <video id="v-outro" class="char-video talk-layer" muted playsinline preload="auto" aria-hidden="true">
+      <source src="assets/video/mariam-talk-outro.mp4?v=1" type="video/mp4" />
     </video>
 
     <!-- The whole screen is the tap target -->
@@ -75,7 +81,7 @@
   </main>
 
   <!-- Config first (so app.js can read window.RESPONSES), then the app. -->
-  <script src="responses.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="responses.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
