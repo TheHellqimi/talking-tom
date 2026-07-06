@@ -27,18 +27,25 @@
   const RECOGNITION_LANG = "en-US";
   const PREFERRED_VOICE_LANG = "en";
 
-  // When muted, Mariam still "talks" (animated) for an estimated duration.
-  const MUTED_MS_PER_CHAR = 55;
-  const MUTED_MIN_MS = 1000;
-  const MUTED_MAX_MS = 5000;
+  // Estimated reply length (ms), used to PLAN the talking animation so it fits
+  // the voice: play a whole number of loop repetitions and nudge the loop speed
+  // so the whole talk (intro + loops + outro) lasts about this long, and the loop
+  // is never cut mid-way. This is a rough estimate from the text for now (TTS
+  // gives no duration up front); it becomes exact when you attach per-reply audio.
+  const VOICE_MS_PER_CHAR = 60;
+  const VOICE_MIN_MS = 1200;
+  const VOICE_MAX_MS = 9000;
+  // The talk loop's playback speed is nudged within these bounds to fit.
+  const LOOP_MIN_RATE = 0.6;
+  const LOOP_MAX_RATE = 1.8;
 
   // The character uses stacked <video> layers in index.html:
   //   #char-video  — idle loop, always playing (base layer)
   //   #v-intro     — idle -> talking transition (plays once)
   //   #v-loop      — seamless talking loop (repeats while she speaks)
   //   #v-outro     — talking -> idle transition (plays once)
-  // The talk sequence (intro -> loop×N -> outro -> idle) is driven by speech
-  // via startTalkAnim() / endTalkAnim() below.
+  // The talk sequence (intro -> loop×N -> outro -> idle) is planned from the
+  // reply length in startTalkAnim() below (N whole loops + a small speed tweak).
 
   // Optional sound-effect paths (all OPTIONAL — missing files fail silently).
   const ASSETS = {
@@ -68,15 +75,15 @@
   let hadResult = false;     // did recognition return a transcript this round?
   let errorHandled = false;  // did onerror already set a message this round?
   let pendingReply = null;   // reply to speak once recognition fully ends (no echo)
-  let mutedStopTimer = null; // timeout id for ending a muted "talking" run
   // Monotonic token: every new utterance bumps it. Async speech callbacks check
   // they still own the latest token before touching state, so a cancelled
   // utterance's late onstart/onend can't clobber a newer one.
   let speakToken = 0;
   // Talk-animation phase machine (idle -> intro -> loop -> outro -> idle).
   let talkPhase = "idle";     // idle | intro | loop | outro
-  let talkVoiceEnded = false; // has the voice finished (so we should play the outro)?
   let talkGen = 0;            // bumped per sequence to invalidate stale clip callbacks
+  let talkReps = 1;           // planned whole loop repetitions for this reply
+  let talkRate = 1;           // planned loop playback speed (to fit the reply length)
   let loopKeepAlive = null;   // interval id that keeps the talk loop repeating
   const sfxCache = {};
 
@@ -135,8 +142,8 @@
   /* ===========================================================================
    *  TALK ANIMATION  (idle -> intro -> loop×N -> outro -> idle)
    *  Three stacked layers over the idle base; exactly one is shown at a time.
-   *  startTalkAnim() when speech begins, endTalkAnim() when it ends. The loop
-   *  repeats until the voice finishes, so it fits replies of any length.
+   *  startTalkAnim(voiceMs) plans a whole number of loop reps + a speed tweak so
+   *  the sequence fits the reply length without ever cutting the loop mid-way.
    * =========================================================================*/
 
   function safePlay(v) {
@@ -156,51 +163,70 @@
     if (els.vOutro) els.vOutro.style.opacity = (name === "outro") ? "1" : "0";
   }
 
-  function startTalkAnim() {
+  function startTalkAnim(voiceMs) {
     if (!els.vIntro || !els.vLoop || !els.vOutro) return; // no clips -> idle stays
     const gen = ++talkGen;
-    talkVoiceEnded = false;
     talkPhase = "intro";
     if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
+
+    // Plan the loop: pick a WHOLE number of repetitions plus a small speed tweak
+    // so the whole talk (intro + loops + outro) lasts about as long as the reply,
+    // and the loop is never cut mid-way. e.g. a 4s reply with a 1.67s loop and
+    // ~1s intro/outro -> ~2s of middle -> 1 loop slowed to fit; a longer reply
+    // -> more whole loops. Exact once you attach per-reply audio durations.
+    const introMs = clipDurationMs(els.vIntro, 1.0);
+    const outroMs = clipDurationMs(els.vOutro, 1.0);
+    const loopMs  = clipDurationMs(els.vLoop, 1.67);
+    const middleMs = Math.max(loopMs * 0.5, (voiceMs || 2500) - introMs - outroMs);
+    talkReps = Math.max(1, Math.round(middleMs / loopMs));
+    talkRate = Math.max(LOOP_MIN_RATE, Math.min(LOOP_MAX_RATE, (talkReps * loopMs) / middleMs));
+
     try { els.vLoop.pause(); els.vOutro.pause(); } catch (e) {}
+    els.vIntro.playbackRate = 1;
     els.vIntro.onended = function () { advanceFromIntro(gen); };
     try { els.vIntro.currentTime = 0; } catch (e) {}
     showTalkLayer("intro");
     safePlay(els.vIntro);
     // Watchdog: if 'ended' never fires (throttling / dropped event), advance anyway.
-    window.setTimeout(function () { advanceFromIntro(gen); }, clipDurationMs(els.vIntro, 1.1) + 300);
+    window.setTimeout(function () { advanceFromIntro(gen); }, introMs + 300);
   }
 
   function advanceFromIntro(gen) {
     if (gen !== talkGen || talkPhase !== "intro") return; // already advanced / stale
-    if (talkVoiceEnded) playTalkOutro(gen); else playTalkLoop(gen);
+    playTalkLoop(gen);
   }
 
+  // Play exactly talkReps WHOLE loops at talkRate, then the outro. Advancing only
+  // on a completed iteration means the loop is never cut mid-way.
   function playTalkLoop(gen) {
     if (gen !== talkGen) return;
     talkPhase = "loop";
     showTalkLayer("loop");
-    const restart = function () { try { els.vLoop.currentTime = 0; } catch (e) {} safePlay(els.vLoop); };
-    els.vLoop.onended = function () { if (gen === talkGen && talkPhase === "loop") restart(); };
+    const loopMs = clipDurationMs(els.vLoop, 1.67);
+    let done = 0;
+    const restart = function () {
+      try { els.vLoop.currentTime = 0; } catch (e) {}
+      els.vLoop.playbackRate = talkRate;
+      safePlay(els.vLoop);
+    };
+    els.vLoop.onended = function () {
+      if (gen !== talkGen || talkPhase !== "loop") return;
+      done++;
+      if (done >= talkReps) playTalkOutro(gen); else restart();
+    };
     restart();
-    // Keep-alive: if a loop iteration stalls or 'ended' is dropped, nudge it back.
+    // Keep-alive: if a loop stalls mid-iteration (paused, no 'ended'), nudge it back.
     if (loopKeepAlive) clearInterval(loopKeepAlive);
     loopKeepAlive = window.setInterval(function () {
       if (gen !== talkGen || talkPhase !== "loop") { clearInterval(loopKeepAlive); loopKeepAlive = null; return; }
-      if (els.vLoop.paused || els.vLoop.ended) restart();
+      if (els.vLoop.paused && !els.vLoop.ended) safePlay(els.vLoop);
     }, 200);
-  }
-
-  // Voice finished: run the outro from wherever we are, then settle to idle.
-  function endTalkAnim() {
-    talkVoiceEnded = true;
-    if (talkPhase === "loop") {
-      playTalkOutro(talkGen);
-    } else if (talkPhase === "idle") {
-      backToIdle(); // no animation running (e.g. clips missing) — just settle
-    }
-    // talkPhase "intro": advanceFromIntro routes to the outro (talkVoiceEnded=true).
-    // talkPhase "outro": already finishing.
+    // Watchdog: if 'ended' events get dropped and the count stalls, force the outro
+    // after the planned total loop time (+ margin).
+    const perLoopMs = loopMs / talkRate;
+    window.setTimeout(function () {
+      if (gen === talkGen && talkPhase === "loop") playTalkOutro(gen);
+    }, talkReps * perLoopMs + perLoopMs + 700);
   }
 
   function playTalkOutro(gen) {
@@ -208,6 +234,7 @@
     talkPhase = "outro";
     if (loopKeepAlive) { clearInterval(loopKeepAlive); loopKeepAlive = null; }
     try { els.vLoop.pause(); } catch (e) {}
+    els.vOutro.playbackRate = 1;
     els.vOutro.onended = function () { finishTalkAnim(gen); };
     try { els.vOutro.currentTime = 0; } catch (e) {}
     showTalkLayer("outro");
@@ -294,7 +321,6 @@
     if (!recognition || recognizing) return;
     speakToken++;            // invalidate any in-flight speech callbacks
     if (synth) synth.cancel();
-    clearMutedTimer();
     stopTalkAnim();
     hideBubble();
 
@@ -438,73 +464,42 @@
   }
 
   function speak(text) {
-    showBubble(text);   // visual reply bubble
-    announce(text);     // screen-reader live region
+    speakToken++;
+    if (synth) synth.cancel();       // stop any current speech
+    showBubble(text);                // visual reply bubble
+    announce(text);                  // screen-reader live region
 
-    const token = ++speakToken;
+    const voiceMs = estimateVoiceMs(text);
+    setState("talking");
+    setStatus("");
+    startTalkAnim(voiceMs);          // plan + run the animation (self-contained)
 
-    if (isMuted || !synth) {
-      speakMuted(text, token);
-      return;
-    }
-
-    try {
-      synth.cancel(); // its stale callbacks are token-guarded
-
-      const utter = new SpeechSynthesisUtterance(text);
-      if (!chosenVoice) chosenVoice = pickVoice(synth.getVoices() || []);
-      if (chosenVoice) utter.voice = chosenVoice;
-      utter.lang   = (chosenVoice && chosenVoice.lang) || RECOGNITION_LANG;
-      utter.pitch  = VOICE_PITCH;
-      utter.rate   = VOICE_RATE;
-      utter.volume = VOICE_VOLUME;
-
-      utter.onstart = function () {
-        if (token !== speakToken) return;
-        setState("talking");
-        setStatus("");
-        startTalkAnim();
-      };
-      utter.onend = function () {
-        if (token !== speakToken) return;
-        endTalkAnim(); // plays the outro, then returns to idle
-      };
-      utter.onerror = function () {
-        if (token !== speakToken) return;
-        stopTalkAnim();
-        backToIdle();
-      };
-
-      synth.speak(utter);
-    } catch (e) {
-      speakMuted(text, token);
+    // Speak aloud unless muted / unsupported. The animation runs independently of
+    // the audio, so nothing breaks if TTS is unavailable or has no 'end' event.
+    if (!isMuted && synth) {
+      try {
+        const utter = new SpeechSynthesisUtterance(text);
+        if (!chosenVoice) chosenVoice = pickVoice(synth.getVoices() || []);
+        if (chosenVoice) utter.voice = chosenVoice;
+        utter.lang   = (chosenVoice && chosenVoice.lang) || RECOGNITION_LANG;
+        utter.pitch  = VOICE_PITCH;
+        utter.rate   = VOICE_RATE;
+        utter.volume = VOICE_VOLUME;
+        synth.speak(utter);
+      } catch (e) { /* animation already running */ }
     }
   }
 
-  // Muted (or no synth): hold the "talking" cue for an estimated duration.
-  function speakMuted(text, token) {
-    setState("talking");
-    setStatus("");
-    startTalkAnim();
-    const ms = Math.min(
-      MUTED_MAX_MS,
-      Math.max(MUTED_MIN_MS, (text ? text.length : 20) * MUTED_MS_PER_CHAR)
-    );
-    clearMutedTimer();
-    mutedStopTimer = window.setTimeout(function () {
-      if (token !== speakToken) return;
-      endTalkAnim(); // plays the outro, then returns to idle
-    }, ms);
+  // Rough guess at how long a reply takes to say, to plan the animation length.
+  // Becomes exact once per-reply audio clips (with real durations) are attached.
+  function estimateVoiceMs(text) {
+    const len = (text ? text.length : 20);
+    return Math.min(VOICE_MAX_MS, Math.max(VOICE_MIN_MS, VOICE_MS_PER_CHAR * len + 250));
   }
 
   function backToIdle() {
-    clearMutedTimer();
     setState("idle");
     setStatus("Tap me to talk again! 👑");
-  }
-
-  function clearMutedTimer() {
-    if (mutedStopTimer) { clearTimeout(mutedStopTimer); mutedStopTimer = null; }
   }
 
   /* ===========================================================================
