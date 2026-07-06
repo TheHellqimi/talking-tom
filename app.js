@@ -156,8 +156,9 @@
     return ((d && isFinite(d) && d > 0) ? d : fallbackSec) * 1000;
   }
 
-  // Cross-fade duration for the idle<->talk boundaries (kept subtle).
-  const TALK_FADE_MS = 160;
+  // Cross-fade duration for the idle<->talk boundaries. Longer = softer dissolve
+  // (more forgiving of any pose difference between idle and the transition clip).
+  const TALK_FADE_MS = 350;
   let fadeTimer = null;
 
   function clearFade() { if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; } }
@@ -169,13 +170,13 @@
     if (!el) return;
     el.style.transition = "none";
     el.style.opacity = String(from);
-    const steps = 8;
+    const steps = Math.max(10, Math.round(ms / 25)); // ~25ms/step -> smooth dissolve
     let i = 0;
     fadeTimer = window.setInterval(function () {
       i++;
       el.style.opacity = String(from + (to - from) * (i / steps));
       if (i >= steps) { el.style.opacity = String(to); clearFade(); }
-    }, Math.max(18, Math.round(ms / steps)));
+    }, Math.max(16, Math.round(ms / steps)));
   }
 
   // Instant swap between talk layers. Used for the pose-matched intro->loop and
